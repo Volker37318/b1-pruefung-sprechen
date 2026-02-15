@@ -80,4 +80,4 @@ app.get("/sessions", async (req, res) => {
 
 app.get("/", (_, res) => res.send("B1 Dialog API running"));
 
-app.listen(process.env.PORT || 8000);
+app.listen(process.env.PORT || 8000, "0.0.0.0");
