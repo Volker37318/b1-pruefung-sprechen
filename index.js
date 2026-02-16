@@ -54,7 +54,7 @@ app.post("/sessions", async (req, res) => {
 });
 
 // --------------------------------------------------
-// 🔴 POST /b1-start  (NEU – Server-Startzeit erzeugen)
+// POST /b1-start  (Server-Startzeit erzeugen)
 // --------------------------------------------------
 app.post("/b1-start", async (req, res) => {
   try {
@@ -140,7 +140,7 @@ app.get("/sessions", async (req, res) => {
 });
 
 // --------------------------------------------------
-// POST /b1-results  (mit Progress-Fortschreibung)
+// POST /b1-results  (AZAV-sicher)
 // --------------------------------------------------
 app.post("/b1-results", async (req, res) => {
   try {
@@ -151,7 +151,6 @@ app.post("/b1-results", async (req, res) => {
       difficulty_level,
       score_total,
       max_score,
-      duration_sec,
       analysis_json,
       session_id
     } = req.body;
@@ -163,7 +162,8 @@ app.post("/b1-results", async (req, res) => {
       !difficulty_level ||
       score_total == null ||
       max_score == null ||
-      !analysis_json
+      !analysis_json ||
+      !session_id
     ) {
       return res.status(400).json({
         ok: false,
@@ -171,21 +171,46 @@ app.post("/b1-results", async (req, res) => {
       });
     }
 
-    // 1️⃣ Session abschließen (falls session_id existiert)
-    if (session_id) {
-      await supabase
-        .from("b1_sessions")
-        .update({
-          score_total,
-          max_score,
-          duration_sec,
-          analysis_json,
-          completed: true
-        })
-        .eq("id", session_id);
+    // 1️⃣ Session laden
+    const { data: session, error: loadError } = await supabase
+      .from("b1_sessions")
+      .select("*")
+      .eq("id", session_id)
+      .single();
+
+    if (loadError || !session) {
+      return res.status(404).json({
+        ok: false,
+        error: "Session not found"
+      });
     }
 
-    // 2️⃣ Alten Progress holen
+    // 2️⃣ Double-Submit verhindern
+    if (session.completed === true) {
+      return res.status(409).json({
+        ok: false,
+        error: "Session already completed"
+      });
+    }
+
+    // 3️⃣ Serverseitige Dauerberechnung
+    const now = new Date();
+    const start = new Date(session.start_time);
+    const duration_sec = Math.floor((now - start) / 1000);
+
+    // 4️⃣ Session abschließen
+    await supabase
+      .from("b1_sessions")
+      .update({
+        score_total,
+        max_score,
+        duration_sec,
+        analysis_json,
+        completed: true
+      })
+      .eq("id", session_id);
+
+    // 5️⃣ Alten Progress holen
     const { data: existingProgress } = await supabase
       .from("b1_progress")
       .select("progress_summary")
@@ -231,7 +256,7 @@ Maximal 200 Wörter.
 `;
     }
 
-    // 3️⃣ GPT Fortschreibung
+    // 6️⃣ GPT Fortschreibung
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -243,7 +268,7 @@ Maximal 200 Wörter.
 
     const newSummary = completion.choices[0].message.content;
 
-    // 4️⃣ Progress upsert
+    // 7️⃣ Progress upsert
     await supabase
       .from("b1_progress")
       .upsert({
