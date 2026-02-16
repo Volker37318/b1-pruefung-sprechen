@@ -15,7 +15,7 @@ const openai = new OpenAI({
 });
 
 // --------------------------------------------------
-// POST /sessions (unverändert gelassen)
+// POST /sessions (bestehend – unverändert)
 // --------------------------------------------------
 app.post("/sessions", async (req, res) => {
   try {
@@ -54,6 +54,58 @@ app.post("/sessions", async (req, res) => {
 });
 
 // --------------------------------------------------
+// 🔴 POST /b1-start  (NEU – Server-Startzeit erzeugen)
+// --------------------------------------------------
+app.post("/b1-start", async (req, res) => {
+  try {
+    const {
+      class_code,
+      participant_id,
+      topic_id,
+      difficulty_level
+    } = req.body;
+
+    if (!class_code || !participant_id || !topic_id) {
+      return res.status(400).json({
+        ok: false,
+        error: "Missing required fields"
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("b1_sessions")
+      .insert({
+        class_code,
+        participant_id,
+        topic_id,
+        difficulty_level,
+        start_time: new Date(),
+        completed: false
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        ok: false,
+        error: error.message
+      });
+    }
+
+    return res.json({
+      ok: true,
+      session_id: data.id
+    });
+
+  } catch (e) {
+    return res.status(500).json({
+      ok: false,
+      error: String(e)
+    });
+  }
+});
+
+// --------------------------------------------------
 // GET /sessions
 // --------------------------------------------------
 app.get("/sessions", async (req, res) => {
@@ -88,7 +140,7 @@ app.get("/sessions", async (req, res) => {
 });
 
 // --------------------------------------------------
-// POST /b1-results (NEU – mit Progress-Fortschreibung)
+// POST /b1-results  (mit Progress-Fortschreibung)
 // --------------------------------------------------
 app.post("/b1-results", async (req, res) => {
   try {
@@ -100,7 +152,8 @@ app.post("/b1-results", async (req, res) => {
       score_total,
       max_score,
       duration_sec,
-      analysis_json
+      analysis_json,
+      session_id
     } = req.body;
 
     if (
@@ -118,25 +171,18 @@ app.post("/b1-results", async (req, res) => {
       });
     }
 
-    // 1️⃣ Session speichern
-    const { error: sessionError } = await supabase
-      .from("b1_sessions")
-      .insert({
-        class_code,
-        participant_id,
-        topic_id,
-        difficulty_level,
-        score_total,
-        max_score,
-        duration_sec,
-        analysis_json
-      });
-
-    if (sessionError) {
-      return res.status(500).json({
-        ok: false,
-        error: sessionError.message
-      });
+    // 1️⃣ Session abschließen (falls session_id existiert)
+    if (session_id) {
+      await supabase
+        .from("b1_sessions")
+        .update({
+          score_total,
+          max_score,
+          duration_sec,
+          analysis_json,
+          completed: true
+        })
+        .eq("id", session_id);
     }
 
     // 2️⃣ Alten Progress holen
@@ -189,14 +235,8 @@ Maximal 200 Wörter.
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: "Du bist ein pädagogischer B1-Prüfungsexperte."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
+        { role: "system", content: "Du bist ein pädagogischer B1-Prüfungsexperte." },
+        { role: "user", content: prompt }
       ],
       temperature: 0.4
     });
@@ -204,7 +244,7 @@ Maximal 200 Wörter.
     const newSummary = completion.choices[0].message.content;
 
     // 4️⃣ Progress upsert
-    const { error: progressError } = await supabase
+    await supabase
       .from("b1_progress")
       .upsert({
         class_code,
@@ -213,13 +253,6 @@ Maximal 200 Wörter.
         progress_summary: newSummary,
         updated_at: new Date()
       });
-
-    if (progressError) {
-      return res.status(500).json({
-        ok: false,
-        error: progressError.message
-      });
-    }
 
     return res.json({ ok: true });
 
@@ -232,7 +265,7 @@ Maximal 200 Wörter.
 });
 
 // --------------------------------------------------
-// GET /b1-results  (holt Sessions)
+// GET /b1-results
 // --------------------------------------------------
 app.get("/b1-results", async (req, res) => {
   try {
@@ -250,7 +283,7 @@ app.get("/b1-results", async (req, res) => {
       .from("b1_sessions")
       .select("*")
       .eq("class_code", classCode)
-      .order("created_at", { ascending: true });
+      .order("start_time", { ascending: true });
 
     if (participant) {
       query = query.eq("participant_id", participant);
@@ -279,7 +312,7 @@ app.get("/b1-results", async (req, res) => {
 });
 
 // --------------------------------------------------
-// GET /b1-progress  (holt Themenentwicklung)
+// GET /b1-progress
 // --------------------------------------------------
 app.get("/b1-progress", async (req, res) => {
   try {
@@ -325,3 +358,4 @@ app.get("/b1-progress", async (req, res) => {
 app.get("/", (_, res) => res.send("B1 Dialog API running"));
 
 app.listen(process.env.PORT || 8000, "0.0.0.0");
+
