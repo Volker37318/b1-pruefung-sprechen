@@ -398,7 +398,12 @@ app.post("/b1-dialog-results", async (req, res) => {
 });
 
 // --------------------------------------------------
-app.get("/", (_, res) => res.send("B1 Dialog API running"));
+app.get("/", (_, res) => {
+  res.send("B1 Dialog API running");
+});
 
-app.listen(process.env.PORT || 8000, "0.0.0.0");
- 
+const PORT = process.env.PORT || 8000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("Server running on port " + PORT);
+});
