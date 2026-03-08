@@ -5,22 +5,23 @@ import OpenAI from "openai";
 const app = express();
 
 app.use((req, res, next) => {
+
+  console.log("REQ:", req.method, req.url);
+
+  const requestedHeaders =
+    req.headers["access-control-request-headers"] ||
+    "Content-Type, Authorization, sentry-trace, baggage";
+
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 
   if (req.method === "OPTIONS") {
+    console.log("OPTIONS handled:", req.url);
     return res.status(204).end();
   }
 
   next();
-});
-
-app.options("*", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  return res.status(204).end();
 });
 
 app.use(express.json());
