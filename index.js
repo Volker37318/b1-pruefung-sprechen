@@ -171,7 +171,6 @@ app.post("/b1-results", async (req, res) => {
       });
     }
 
-    // 1️⃣ Session laden
     const { data: session, error: loadError } = await supabase
       .from("b1_sessions")
       .select("*")
@@ -185,7 +184,6 @@ app.post("/b1-results", async (req, res) => {
       });
     }
 
-    // 2️⃣ Double-Submit verhindern
     if (session.completed === true) {
       return res.status(409).json({
         ok: false,
@@ -193,12 +191,10 @@ app.post("/b1-results", async (req, res) => {
       });
     }
 
-    // 3️⃣ Serverseitige Dauerberechnung
     const now = new Date();
     const start = new Date(session.start_time);
     const duration_sec = Math.floor((now - start) / 1000);
 
-    // 4️⃣ Session abschließen
     await supabase
       .from("b1_sessions")
       .update({
@@ -210,7 +206,6 @@ app.post("/b1-results", async (req, res) => {
       })
       .eq("id", session_id);
 
-    // 5️⃣ Alten Progress holen
     const { data: existingProgress } = await supabase
       .from("b1_progress")
       .select("progress_summary")
@@ -256,7 +251,6 @@ Maximal 200 Wörter.
 `;
     }
 
-    // 6️⃣ GPT Fortschreibung
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -268,7 +262,6 @@ Maximal 200 Wörter.
 
     const newSummary = completion.choices[0].message.content;
 
-    // 7️⃣ Progress upsert
     await supabase
       .from("b1_progress")
       .upsert({
@@ -380,7 +373,32 @@ app.get("/b1-progress", async (req, res) => {
   }
 });
 
+// --------------------------------------------------
+// NEU: Speicherung einzelner Dialogbeiträge
+// --------------------------------------------------
+app.post("/b1-dialog-results", async (req, res) => {
+  try {
+
+    const data = req.body;
+
+    const { error } = await supabase
+      .from("b1_dialog_results")
+      .insert([data]);
+
+    if (error) {
+      console.log("Supabase error:", error);
+      return res.json({ ok:false, error:error.message });
+    }
+
+    res.json({ ok:true });
+
+  } catch (err) {
+    res.json({ ok:false, error:err.message });
+  }
+});
+
+// --------------------------------------------------
 app.get("/", (_, res) => res.send("B1 Dialog API running"));
 
 app.listen(process.env.PORT || 8000, "0.0.0.0");
-
+ 
