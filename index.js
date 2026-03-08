@@ -3,17 +3,27 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
 const app = express();
-app.use(express.json());
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+
   if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
+    return res.status(204).end();
   }
+
   next();
 });
+
+app.options("*", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  return res.status(204).end();
+});
+
+app.use(express.json());
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -106,7 +116,6 @@ app.post("/b1-start", async (req, res) => {
       ok: true,
       session_id: data.id
     });
-
   } catch (e) {
     return res.status(500).json({
       ok: false,
@@ -205,7 +214,7 @@ app.post("/b1-results", async (req, res) => {
     const start = new Date(session.start_time);
     const duration_sec = Math.floor((now - start) / 1000);
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("b1_sessions")
       .update({
         score_total,
@@ -215,6 +224,13 @@ app.post("/b1-results", async (req, res) => {
         completed: true
       })
       .eq("id", session_id);
+
+    if (updateError) {
+      return res.status(500).json({
+        ok: false,
+        error: updateError.message
+      });
+    }
 
     const { data: existingProgress } = await supabase
       .from("b1_progress")
@@ -270,9 +286,9 @@ Maximal 200 Wörter.
       temperature: 0.4
     });
 
-    const newSummary = completion.choices[0].message.content;
+    const newSummary = completion.choices?.[0]?.message?.content || "";
 
-    await supabase
+    const { error: upsertError } = await supabase
       .from("b1_progress")
       .upsert({
         class_code,
@@ -282,8 +298,14 @@ Maximal 200 Wörter.
         updated_at: new Date()
       });
 
-    return res.json({ ok: true });
+    if (upsertError) {
+      return res.status(500).json({
+        ok: false,
+        error: upsertError.message
+      });
+    }
 
+    return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({
       ok: false,
@@ -330,7 +352,6 @@ app.get("/b1-results", async (req, res) => {
       ok: true,
       rows: data
     });
-
   } catch (e) {
     return res.status(500).json({
       ok: false,
@@ -374,7 +395,6 @@ app.get("/b1-progress", async (req, res) => {
       ok: true,
       row: data || null
     });
-
   } catch (e) {
     return res.status(500).json({
       ok: false,
@@ -384,11 +404,10 @@ app.get("/b1-progress", async (req, res) => {
 });
 
 // --------------------------------------------------
-// NEU: Speicherung einzelner Dialogbeiträge
+// Speicherung einzelner Dialogbeiträge / Auswertung
 // --------------------------------------------------
 app.post("/b1-dialog-results", async (req, res) => {
   try {
-
     const data = req.body;
 
     const { error } = await supabase
@@ -397,13 +416,12 @@ app.post("/b1-dialog-results", async (req, res) => {
 
     if (error) {
       console.log("Supabase error:", error);
-      return res.json({ ok:false, error:error.message });
+      return res.status(500).json({ ok: false, error: error.message });
     }
 
-    res.json({ ok:true });
-
+    return res.json({ ok: true });
   } catch (err) {
-    res.json({ ok:false, error:err.message });
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
