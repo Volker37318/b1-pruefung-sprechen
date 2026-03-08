@@ -4,10 +4,9 @@
   "type": "module",
   "main": "index.js",
   "engines": {
-    "node": ">=18"
+    "node": "18.x"
   },
   "scripts": {
-    "build": "npm install",
     "start": "node index.js"
   },
   "dependencies": {
