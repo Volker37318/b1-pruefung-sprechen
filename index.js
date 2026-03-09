@@ -13,8 +13,10 @@ app.use((req, res, next) => {
     "Content-Type, Authorization, sentry-trace, baggage";
 
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
+res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+res.setHeader("Access-Control-Allow-Credentials", "true");
+res.setHeader("Access-Control-Max-Age", "86400");
 
   if (req.method === "OPTIONS") {
     console.log("OPTIONS handled:", req.url);
