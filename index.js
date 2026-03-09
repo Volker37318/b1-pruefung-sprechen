@@ -36,6 +36,45 @@ const openai = new OpenAI({
 });
 
 // --------------------------------------------------
+// GPT Proxy für Dialog-App
+// --------------------------------------------------
+app.post("/gpt", async (req, res) => {
+  try {
+
+    const { messages, model = "gpt-4o-mini", temperature = 0.7 } = req.body;
+
+    if (!messages) {
+      return res.status(400).json({
+        ok: false,
+        error: "Missing messages"
+      });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      temperature
+    });
+
+    const reply = completion.choices?.[0]?.message?.content || "";
+
+    return res.json({
+      ok: true,
+      reply
+    });
+
+  } catch (err) {
+
+    console.error("GPT proxy error:", err);
+
+    return res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+// --------------------------------------------------
 // POST /sessions (bestehend – unverändert)
 // --------------------------------------------------
 app.post("/sessions", async (req, res) => {
