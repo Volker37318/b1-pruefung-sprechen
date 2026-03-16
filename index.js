@@ -12,7 +12,19 @@ app.use((req, res, next) => {
     req.headers["access-control-request-headers"] ||
     "Content-Type, Authorization, sentry-trace, baggage";
 
-  res.setHeader("Access-Control-Allow-Origin", "*");
+const allowedOrigins = [
+  "https://b1-dialog.netlify.app",
+  "https://b1-dialogpartner.de",
+  "https://www.b1-dialogpartner.de"
+];
+
+const origin = req.headers.origin;
+
+if (allowedOrigins.includes(origin)) {
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");   // wichtig für Browser-Cache
+}
+
 res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
 res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 res.setHeader("Access-Control-Allow-Credentials", "true");
